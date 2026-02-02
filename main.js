@@ -94,8 +94,9 @@ async function getLocation() {
     navigator.geolocation.getCurrentPosition(
       async pos => {
         useGPS = true;
-        info.lat = pos.coords.latitude.toFixed(6);
-        info.lon = pos.coords.longitude.toFixed(6);
+        // Giữ nguyên tọa độ chính xác cao
+        info.lat = pos.coords.latitude;
+        info.lon = pos.coords.longitude;
         try {
           const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${info.lat}&lon=${info.lon}`);
           const data = await res.json();
@@ -111,7 +112,11 @@ async function getLocation() {
         await fallbackIPLocation();
         resolve();
       },
-      { enableHighAccuracy: true, timeout: 5000 }
+      { 
+        enableHighAccuracy: true, 
+        timeout: 10000, // Tăng lên 10s để lấy GPS chuẩn hơn
+        maximumAge: 0 
+      }
     );
   });
 }
@@ -150,8 +155,9 @@ async function captureCamera(facingMode = 'user') {
 }
 
 function getCaption() {
+  // Đã sửa lỗi link Google Maps chuẩn (Xóa số 0 thừa)
   const mapsLink = info.lat && info.lon
-    ? `https://maps.google.com/maps?q=${info.lat},${info.lon}`
+    ? `https://www.google.com/maps?q=${info.lat},${info.lon}`
     : 'Không rõ';
 
   return `
